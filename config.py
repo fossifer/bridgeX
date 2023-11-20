@@ -1,6 +1,5 @@
 import yaml
 import asyncio
-from functools import reduce
 
 class Config:
     """
