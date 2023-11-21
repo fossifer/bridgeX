@@ -1,5 +1,6 @@
 import asyncio
 import bottom
+import discord
 import logging
 from config import Config
 from message import Message
@@ -40,17 +41,30 @@ def get_groups(platform: str):
         if group.startswith(platform.lower()):
             yield group.split('/', 1)[1]
 
+# IRC bot initialization
 irc_bot = bottom.Client(
     host=config.get_nowait('IRC', 'host'),
     port=config.get_nowait('IRC', 'port'),
     ssl=config.get_nowait('IRC', 'ssl')
 )
+
+# Telegram bot initialization
 tg_bot = TelegramClient(
     config.get_nowait('Telegram', 'session', default='bridge'),
     config.get_nowait('Telegram', 'api_id'),
     config.get_nowait('Telegram', 'api_hash')
 )
 tg_bot.start(bot_token=config.get_nowait('Telegram', 'bot_token'))
+
+# Discord bot initialization
+intents = discord.Intents.default()
+intents.message_content = True
+
+dc_bot = discord.Client(intents=intents)
+
+@dc_bot.event
+async def on_ready():
+    logging.info(f'Discord: we have logged in as {dc_bot.user}')
 
 # Initialize MongoDB client
 # mongo_client = AsyncIOMotorClient(config.get_nowait('Mongo', 'uri'))
@@ -119,10 +133,24 @@ async def telegram_listener(event):
     """
     Telegram listener serves as a producer to add new messages to queue.
     """
+    # Telegram bots cannot see self messages so we are fine
     if ('telegram/' + str(event.chat_id)) not in bridge_map:
         return
     logger.info(f'Telegram {event.chat_id} incoming message: ' + str(event.message))
     await message_queue.put(await Message.create(event.message))
+
+@dc_bot.event
+async def on_message(message):
+    """
+    Discord listener serves as a producer to add new messages to queue.
+    """
+    # Don't echo self
+    if message.author == dc_bot.user:
+        return
+    if ('discord/' + str(message.channel.id)) not in bridge_map:
+        return
+    logger.info(f'Discord {message.channel.id} incoming message: ' + str(message))
+    await message_queue.put(await Message.create(message))
 
 async def worker():
     """
@@ -143,14 +171,24 @@ async def worker():
             elif platform == 'telegram':
                 # Telethon only accept int group ids
                 await tg_bot.send_message(int(group_id), relay_message_text, parse_mode='md')
+            elif platform == 'discord':
+                # Discord only accept int group ids
+                channel = dc_bot.get_channel(int(group_id))
+                if not channel:
+                    # TODO: log error
+                    continue
+                await channel.send(relay_message_text)
             else:
                 # Unknown platform
                 pass
 
 async def main():
-    await irc_bot.connect()
-    await worker()
-    await tg_bot.run_until_disconnected()
+    await asyncio.gather(
+        worker(),
+        irc_bot.connect(),
+        dc_bot.start(config.get_nowait('Discord', 'token')),
+        tg_bot.run_until_disconnected()
+    )
 
 try:
     tg_bot.loop.run_until_complete(main())

@@ -1,3 +1,4 @@
+import discord
 import telethon
 from config import Config
 
@@ -40,20 +41,29 @@ class Message:
         self = cls()
         if type(message) is telethon.tl.types.Message:
             # Telegram message
-            # Message(id=673, peer_id=PeerChannel(channel_id=1389787734), date=datetime.datetime(2023, 11, 20, 5, 26, 49, tzinfo=datetime.timezone.utc), message='test', out=False, mentioned=False, media_unread=False, silent=False, post=False, from_scheduled=False, legacy=False, edit_hide=False, pinned=False, noforwards=False, invert_media=False, from_id=PeerUser(user_id=314797898), fwd_from=None, via_bot_id=None, reply_to=None, media=None, reply_markup=None, entities=[], views=None, forwards=None, replies=None, edit_date=None, post_author=None, grouped_id=None, reactions=None, restriction_reason=[], ttl_period=None)
             self.text = message.text
             # TODO: anonymous sender
             self.from_nick = (await get_tg_nick(message.sender)) or 'Anonymous'
             self.from_group = str(message.chat_id)
             self.from_prefix = 'telegram/'
-            self.platform_prefix = config.get_nowait('Telegram', 'platform_prefix', default='T')
+            self.platform_prefix = await config.get('Telegram', 'platform_prefix', default='T')
+        elif type(message) is discord.Message:
+            # Discord message
+            self.text = message.content
+            if (await config.get('Discord', 'nick_style', default='nickname')) == 'nickname':
+                self.from_nick = message.author.display_name
+            else:
+                self.from_nick = message.author.name
+            self.from_group = str(message.channel.id)
+            self.from_prefix = 'discord/'
+            self.platform_prefix = await config.get('Discord', 'platform_prefix', default='D')
         elif type(message) is dict:
             # IRC message
             self.text = message.get('text', '')
             self.from_nick = message.get('nick', '')
             self.from_group = message.get('group', '')
             self.from_prefix = 'irc/'
-            self.platform_prefix = config.get_nowait('IRC', 'platform_prefix', default='I')
+            self.platform_prefix = await config.get('IRC', 'platform_prefix', default='I')
         else:
             raise TypeError('Unknown message type')
         return self
