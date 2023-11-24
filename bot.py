@@ -7,7 +7,7 @@ from config import Config
 from datetime import datetime
 from message import Message, get_relay_message
 from motor.motor_asyncio import AsyncIOMotorClient
-from telethon import TelegramClient, events, errors
+from telethon import TelegramClient, events, errors, functions, types
 
 # Load configs from file
 config = Config('bridge.yaml')
@@ -172,6 +172,77 @@ async def telegram_deleted_listener(event):
         return
     logger.info(f'Messages to be deleted in bridged groups: {to_delete}')
     await message_queue.put({'action': 'delete', 'body': to_delete})
+
+async def telegram_deleted_poller():
+    """
+    Poll the admin log to get recent deleted messages.
+    The bot needs to be an admin (regardless of rights) in each group.
+    """
+    # Wait for other platforms to initialize
+    await asyncio.sleep(30)
+    while True:
+        # Poll outbound telegram groups only
+        for group in bridge_map:
+            if not group.startswith('telegram/'):
+                continue
+            chat_id = int(group.split('/', 1)[1])
+            # Only check the most recent 500 messages
+            messages = msg_collection.find({
+                '$or': [
+                    {'to_groups': group},
+                    {'from_platform': 'telegram', 'from_group': str(chat_id)},
+                ]
+            }).sort({'_id': -1}).limit(500)
+            messages = await messages.to_list(None)
+            # logger.info(f'Poller got {len(messages)} messages for group {group}')
+            msg_ids = []
+            for message in messages:
+                if message.get('from_group') == str(chat_id) and message.get('from_platform') == 'telegram':
+                    # Outbound message
+                    msg_ids.append(message.get('from_message_id'))
+                else:
+                    try:
+                        # Inbound message, pull the message id from to_message list
+                        idx = message.get('to_groups', []).index(group)
+                        msg_ids.append(message.get('to_message_ids', [])[idx])
+                    except ValueError:
+                        continue
+            if not msg_ids:
+                continue
+            # logger.info(f'Poller got {len(msg_ids)} msg_ids: {msg_ids}')
+            try:
+                # Return type is ChannelMessages
+                msgs = await tg_bot(functions.channels.GetMessagesRequest(
+                    channel=chat_id,
+                    id=msg_ids,
+                ))
+                msgs = msgs.messages
+            except errors.FloodWaitError as e:
+                logger.info(f'FloodWaitError in telegram_deleted_poller: sleep {e.seconds} seconds')
+                await asyncio.sleep(e.seconds)
+            except errors.RPCError as e:
+                logger.warn(f'Poller error on GetMessagesRequest: {e}')
+                pass
+            # logger.info(f'Poller got {len(msgs)} msgs: {msgs}')
+            # Find holes in messages
+            to_delete = defaultdict(list)
+            for i in range(len(msgs)):
+                if type(msgs[i]) is types.MessageEmpty or msgs[i] is None:
+                    old_msg, next_to_delete = await find_bridged_messages_and_update('telegram', chat_id, msg_ids[i], None, {
+                        'deleted': True,
+                        'deleted_at': datetime.utcnow(),
+                    })
+                    if old_msg.get('deleted'):
+                        continue
+                    for key in next_to_delete:
+                        to_delete[key].extend(next_to_delete[key])
+            if not to_delete:
+                continue
+            logger.info(f'Messages to be deleted in bridged groups: {to_delete}')
+            await message_queue.put({'action': 'delete', 'body': to_delete})
+
+        # Sleep after finishing a loop of all chats
+        await asyncio.sleep(3)
 
 @tg_bot.on(events.MessageEdited)
 async def telegram_edited_listener(event):
@@ -345,7 +416,7 @@ async def worker():
                             try:
                                 # TODO: embeds
                                 await tg_bot.edit_message(int(group_id), msg_id, relay_message_text)
-                            except errors as e:
+                            except errors.RPCError as e:
                                 logger.warning(f'Telegram error occured on deleting messages {ids_to_edit} in {group_id}: {e}')
                             except Exception as e:
                                 # TODO: probably catch errors.FloodWaitError
@@ -421,7 +492,8 @@ async def main():
         worker(),
         irc_bot.connect(),
         dc_bot.start(config.get_nowait('Discord', 'token')),
-        tg_bot.run_until_disconnected()
+        telegram_deleted_poller(),
+        tg_bot.run_until_disconnected(),
     )
 
 try:
