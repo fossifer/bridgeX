@@ -18,6 +18,18 @@ async def get_tg_nick(sender):
         return username or first_last
     else:
         return first_last or username
+    
+async def get_relay_message(message, target_platform: str) -> str:
+    """
+    Add a prefix to the message from other platforms to indicate the source.
+    """
+    bold_char = ''
+    if target_platform in {'telegram', 'discord'}:
+        bold_char = '**'
+    elif target_platform == 'irc':
+        bold_char = '\u0002'
+    # TODO: make it configurable
+    return f'[{message.platform_prefix} - {bold_char}{message.from_nick}{bold_char}] {message.text}'
 
 class Message:
     """
@@ -56,6 +68,7 @@ class Message:
             self.from_platform = 'telegram'
             self.platform_prefix = await config.get('Telegram', 'platform_prefix', default='T')
             self.created_at = message.date
+            self.edited_at = message.edit_date
         elif type(message) is discord.Message:
             # Discord message
             self.text = message.content
@@ -69,6 +82,7 @@ class Message:
             self.from_platform = 'discord'
             self.platform_prefix = await config.get('Discord', 'platform_prefix', default='D')
             self.created_at = message.created_at
+            self.edited_at = message.edited_at
         elif type(message) is dict:
             # IRC message
             self.text = message.get('text', '')
@@ -82,6 +96,9 @@ class Message:
         else:
             raise TypeError('Unknown message type')
         return self
+
+    def __repr__(self) -> str:
+        return self.__str__()
 
     def __str__(self):
         return f'[{self.created_at.isoformat()}] {self.from_platform}/{self.from_group}:{self.from_message_id} -> [{self.platform_prefix} - {self.from_nick} ({self.from_user_id})] {self.text}'

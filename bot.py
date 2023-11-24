@@ -5,7 +5,7 @@ import logging
 from collections import defaultdict
 from config import Config
 from datetime import datetime
-from message import Message
+from message import Message, get_relay_message
 from motor.motor_asyncio import AsyncIOMotorClient
 from telethon import TelegramClient, events, errors
 
@@ -150,15 +150,15 @@ async def telegram_listener(event):
 async def telegram_deleted_listener(event):
     """
     Telegram listener that detects when messages are deleted.
-    From telethon doc it isn’t 100% reliable. Actually it works like only 1% of the time.
+    From telethon doc it isn't 100% reliable. Actually it works like only 1% of the time.
     So we have to implement the polling method as well ¯\_(ツ)_/¯
     """
     if ('telegram/' + str(event.chat_id)) not in bridge_map:
         return
     logger.info(f'Telegram message {event.deleted_ids} were deleted in {event.chat_id}')
-    old_msg, to_delete = defaultdict(list)
+    to_delete = defaultdict(list)
     for msg_id in event.deleted_ids:
-        next_to_delete = await find_bridged_messages_and_update('telegram', event.chat_id, msg_id, None, {
+        old_msg, next_to_delete = await find_bridged_messages_and_update('telegram', event.chat_id, msg_id, None, {
             'deleted': True,
             'deleted_at': datetime.utcnow(),
         })
@@ -172,6 +172,25 @@ async def telegram_deleted_listener(event):
         return
     logger.info(f'Messages to be deleted in bridged groups: {to_delete}')
     await message_queue.put({'action': 'delete', 'body': to_delete})
+
+@tg_bot.on(events.MessageEdited)
+async def telegram_edited_listener(event):
+    """
+    Telegram listener that detects when messages are edited.
+    """
+    if ('telegram/' + str(event.chat_id)) not in bridge_map:
+        return
+    logger.info(f'Telegram message {event.message.id} were edited in {event.chat_id}')
+    _, to_edit = await find_bridged_messages_and_update('telegram', event.chat_id, event.message.id, False, {
+        'edited_at': event.message.edit_date,
+        'text': event.message.text,
+        # TODO: embeds
+    })
+    if not to_edit:
+        return
+    logger.info(f'Messages to be edited in bridged groups: {to_edit}')
+    new_message = await Message.create(event.message)
+    await message_queue.put({'action': 'edit', 'body': {'to_edit': to_edit, 'new_message': new_message}})
 
 @dc_bot.event
 async def on_message(message):
@@ -189,7 +208,7 @@ async def on_message(message):
 @dc_bot.event
 async def on_message_delete(message):
     """
-    Discord listener that detects when messages are deleted. One at a time.
+    Discord listener that detects when a message is deleted.
     I am glad that it is much more reliable than the telegram listener.
     """
     if ('discord/' + str(message.channel.id)) not in bridge_map:
@@ -204,6 +223,29 @@ async def on_message_delete(message):
         return
     logger.info(f'Messages to be deleted in bridged groups: {to_delete}')
     await message_queue.put({'action': 'delete', 'body': to_delete})
+
+@dc_bot.event
+async def on_message_edit(_, message):
+    """
+    Discord listener that detects when a message is edited.
+
+    It takes two arguments: before and after. We do not need the before one.
+    """
+    if ('discord/' + str(message.channel.id)) not in bridge_map:
+        return
+    if message.author == dc_bot.user:
+        return
+    logger.info(f'Discord message {message.id} were edited in {message.channel.id}')
+    _, to_edit = await find_bridged_messages_and_update('discord', message.channel.id, message.id, False, {
+        'edited_at': message.edited_at,
+        'text': message.content,
+        # TODO: embeds
+    })
+    if not to_edit:
+        return
+    logger.info(f'Messages to be edited in bridged groups: {to_edit}')
+    new_message = await Message.create(message)
+    await message_queue.put({'action': 'edit', 'body': {'to_edit': to_edit, 'new_message': new_message}})
 
 async def find_bridged_messages_and_update(platform: str, group_id, message_id: int, self_authored, update={}):
     """
@@ -232,7 +274,7 @@ async def find_bridged_messages_and_update(platform: str, group_id, message_id: 
     else:
         # It's originated from the current group
         message = await msg_collection.find_one_and_update({
-            'from_platform': 'discord',
+            'from_platform': platform,
             'from_group': str(group_id),
             'from_message_id': message_id,
         }, {'$set': update})
@@ -291,18 +333,49 @@ async def worker():
                     else:
                         logger.warning(f'Unknown platform: {platform} (from {message}), please report this bug')
             elif action == 'edit':
-                pass
+                new_message = message.get('body', {}).get('new_message')
+                for group_to_edit, ids_to_edit in message.get('body', {}).get('to_edit', {}).items():
+                    platform, group_id = group_to_edit.split('/', 1)
+                    relay_message_text = await get_relay_message(new_message, platform)
+                    if platform == 'irc':
+                        # Cannot edit IRC messages
+                        continue
+                    elif platform == 'telegram':
+                        for msg_id in ids_to_edit:
+                            try:
+                                # TODO: embeds
+                                await tg_bot.edit_message(int(group_id), msg_id, relay_message_text)
+                            except errors as e:
+                                logger.warning(f'Telegram error occured on deleting messages {ids_to_edit} in {group_id}: {e}')
+                            except Exception as e:
+                                # TODO: probably catch errors.FloodWaitError
+                                logger.warning(f'Unknown error occured on deleting messages {ids_to_edit} in {group_id}: {e}')
+                    elif platform == 'discord':
+                        channel = dc_bot.get_channel(int(group_id))
+                        if not channel:
+                            # TODO: log error
+                            continue
+                        for msg_id in ids_to_edit:
+                            msg = await channel.fetch_message(msg_id)
+                            try:
+                                await msg.edit(content=relay_message_text)
+                            except discord.errors.DiscordException as e:
+                                logger.warning(f'Discord error occured on deleting message {msg_id} in {group_id}: {e}')
+                            except Exception as e:
+                                logger.warning(f'Unknown error occured on deleting message {msg_id} in {group_id}: {e}')
+                    else:
+                        logger.warning(f'Unknown platform: {platform} (from {message}), please report this bug')
             else:
                 logger.warning(f'Unknown action {action} from message of a listener: {message}')
             continue
         logger.info(f'outgoing message: ' + str(message))
         from_group = message.from_platform + '/' + message.from_group
-        relay_message_text = f'[{message.platform_prefix} - {message.from_nick}] {message.text}'
         to_msg_ids = []
         # TODO: this should be dynamically loaded from config
         for group_to_send in bridge_map.get(from_group, []):
             # TODO: make this a helper function
             platform, group_id = group_to_send.split('/', 1)
+            relay_message_text = await get_relay_message(message, platform)
             if platform == 'irc':
                 # TODO: if message is too long, send in multiple times
                 irc_bot.send('PRIVMSG', target=group_id, message=relay_message_text)
