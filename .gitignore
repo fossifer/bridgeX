@@ -1,5 +1,6 @@
 # Environments
 venv/
+__pycache__/
 
 # Tests
 tests/
