@@ -43,7 +43,6 @@ class Message:
         self.from_nick = None
         self.from_group = None
         self.from_message_id = None
-        self.from_platform = None
         self.platform_prefix = None
         self.created_at = None
         self.edited_at = None
@@ -63,9 +62,8 @@ class Message:
             # TODO: Make nickname of anonymous sender configurable
             self.from_user_id = message.sender_id
             self.from_nick = (await get_tg_nick(message.sender)) or 'Anonymous'
-            self.from_group = str(message.chat_id)
+            self.from_group = 'telegram/' + str(message.chat_id)
             self.from_message_id = message.id
-            self.from_platform = 'telegram'
             self.platform_prefix = await config.get('Telegram', 'platform_prefix', default='T')
             self.created_at = message.date
             self.edited_at = message.edit_date
@@ -77,9 +75,8 @@ class Message:
                 self.from_nick = message.author.display_name
             else:
                 self.from_nick = message.author.name
-            self.from_group = str(message.channel.id)
+            self.from_group = 'discord/' + str(message.channel.id)
             self.from_message_id = message.id
-            self.from_platform = 'discord'
             self.platform_prefix = await config.get('Discord', 'platform_prefix', default='D')
             self.created_at = message.created_at
             self.edited_at = message.edited_at
@@ -88,9 +85,8 @@ class Message:
             self.text = message.get('text', '')
             self.from_user_id = message.get('host', '')
             self.from_nick = message.get('nick', '')
-            self.from_group = message.get('group', '')
+            self.from_group = 'irc/' + message.get('group', '')
             self.from_message_id = None  # IRC does not have message ids
-            self.from_platform = 'irc'
             self.platform_prefix = await config.get('IRC', 'platform_prefix', default='I')
             self.created_at = message.get('created_at')
         else:
@@ -101,4 +97,4 @@ class Message:
         return self.__str__()
 
     def __str__(self):
-        return f'[{self.created_at.isoformat()}] {self.from_platform}/{self.from_group}:{self.from_message_id} -> [{self.platform_prefix} - {self.from_nick} ({self.from_user_id})] {self.text}'
+        return f'[{self.created_at.isoformat()}] {self.from_group}:{self.from_message_id} -> [{self.platform_prefix} - {self.from_nick} ({self.from_user_id})] {self.text}'
