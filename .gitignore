@@ -9,5 +9,8 @@ tests/
 *.session
 *.session-journal
 
+# Downloaded files
+files/
+
 # Configs
 bridge.yaml
