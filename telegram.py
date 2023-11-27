@@ -151,7 +151,7 @@ class Telegram(MessagingPlatform):
                 msg_doc = await db.find_bridged_messages_to_update(group, msg_id)
                 if not msg_doc or msg_doc.get('deleted') or not msg_doc.get('bridge_messages'):
                     continue
-                to_delete.extend(msg_doc.get("bridge_messages"))
+                to_delete.append(msg_doc)
                 await db.delete_message_record(msg_doc)
 
             if not to_delete:
@@ -185,7 +185,7 @@ class Telegram(MessagingPlatform):
 
             logger.info(f'Messages to be edited in bridged groups: {msg_doc.get("bridge_messages")}')
             new_message = await Message.create(event.message, files=([file] if file else []))
-            await message_queue.put({'action': 'edit', 'body': {'to_edit': msg_doc.get("bridge_messages"), 'new_message': new_message}})
+            await message_queue.put({'action': 'edit', 'body': {'to_edit': msg_doc, 'new_message': new_message}})
 
     async def deleted_poller(self):
         """
@@ -234,7 +234,7 @@ class Telegram(MessagingPlatform):
                         msg_doc = await db.find_bridged_messages_to_update(group, msg_ids[i])
                         if not msg_doc or msg_doc.get('deleted') or not msg_doc.get('bridge_messages'):
                             continue
-                        to_delete.extend(msg_doc.get("bridge_messages"))
+                        to_delete.append(msg_doc)
                         await db.delete_message_record(msg_doc)
                 if not to_delete:
                     continue

@@ -97,7 +97,7 @@ class Discord(MessagingPlatform):
                 return
             logger.info(f'Messages to be deleted in bridged groups: {msg_doc.get("bridge_messages")}')
             # Put the request into queue for workers to actually delete messages
-            await message_queue.put({'action': 'delete', 'body': msg_doc.get("bridge_messages")})
+            await message_queue.put({'action': 'delete', 'body': msg_doc})
             await db.delete_message_record(msg_doc)
 
         @bot.event
@@ -128,7 +128,7 @@ class Discord(MessagingPlatform):
             })
             logger.info(f'Messages to be edited in bridged groups: {msg_doc.get("bridge_messages")}')
             new_message = await Message.create(message, files=files)
-            await message_queue.put({'action': 'edit', 'body': {'to_edit': msg_doc.get("bridge_messages"), 'new_message': new_message}})
+            await message_queue.put({'action': 'edit', 'body': {'to_edit': msg_doc, 'new_message': new_message}})
 
     def construct_files(self, files: list[File]) -> list[discord.File]:
         ret = []

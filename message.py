@@ -47,6 +47,34 @@ async def get_relay_message(message, target_platform: str) -> str:
     # TODO: make the message format configurable
     return f'[{message.platform_prefix} - {bold_char}{message.from_nick}{bold_char}] {file_str}{message.text}'
 
+async def get_edited_message(old_message: dict, new_message) -> str:
+    """
+    A text notice to send exclusively for IRC when bridged messages are edited.
+    """
+    # Truncate old message
+    old_text = old_message.get("text", "An unknown message")
+    if len(old_text) > 50:
+        old_text = old_text[:50] + '...'
+    # Old message text <blue,bold>was edited to:</blue,bold> New message text
+    return f'\u001E{old_text}\u001E \u0002\u000312was edited to:\u0003\u0002 {new_message.text}'
+
+async def get_deleted_message(old_messages: list[dict]) -> str:
+    """
+    A text notice to send exclusively for IRC when bridged messages are deleted.
+    """
+    # Truncate too long messages; only show text of first message
+    if not old_messages: return
+    old_text = old_messages[0].get("text", "An unknown message")
+    if len(old_text) > 200:
+        old_text = old_text[:200] + '...'
+    verb = 'was'
+    more_text = ''
+    if len(old_messages) > 1:
+        more_text = f' and {len(old_messages) - 1} more messages'
+        verb = 'were'
+    # <s>Old message text</s> <red,bold>was deleted</red,bold>
+    return f'\u001E{old_text}\u001E{more_text} \u0002\u000304{verb} deleted\u0003\u0002'
+
 class File:
     """
     The media files used in message attachments.

@@ -78,6 +78,7 @@ class MongoDB:
 
         # Delete all files contained in the message
         for file in msg_doc.get('files', []):
+            if not file: continue
             if file.get('path'):
                 logger.info(f'Deleting local file {file.get("path")}')
                 try:

@@ -6,7 +6,7 @@ from config import Config
 from database import MongoDB
 from discordbot import Discord
 from irc import IRC
-from message import get_relay_message
+from message import get_relay_message, get_deleted_message, get_edited_message
 from telegram import Telegram
 from telethon import errors
 
@@ -58,47 +58,54 @@ async def worker():
             logger.info(f'internal message: {message}')
             action = message.get('action')
             if action == 'delete':
-                # TODO: delete local files included in the message
-                for to_delete in message.get('body', {}):
-                    group_to_delete, id_to_delete = to_delete.get('group', ''), to_delete.get('message_id')
-                    platform, group_id = group_to_delete.split('/', 1)
-                    if platform == 'irc':
-                        # Cannot delete IRC messages
-                        continue
-                    elif platform == 'telegram':
-                        # Delete all messages at the same time
-                        try:
-                            await tg_bot.delete_messages(int(group_id), [id_to_delete])
-                        except (errors.ChannelInvalidError, errors.ChannelPrivateError, errors.MessageDeleteForbiddenError) as e:
-                            logger.warning(f'Telegram error occured on deleting message {id_to_delete} in {group_id}: {e}')
-                        except Exception as e:
-                            # TODO: probably catch errors.FloodWaitError
-                            logger.warning(f'Unknown error occured on deleting message {id_to_delete} in {group_id}: {e}')
-                    elif platform == 'discord':
-                        # Have to delete messages one by one
-                        try:
-                            channel = dc_bot.get_channel(int(group_id))
-                            if not channel:
-                                logger.warning(f'Discord error occured on deleting message {id_to_delete} in {group_id}: channel not found')
-                                continue
-                            msg = await channel.fetch_message(id_to_delete)
-                            await msg.delete()
-                        except discord.errors.DiscordException as e:
-                            logger.warning(f'Discord error occured on deleting message {id_to_delete} in {group_id}: {e}')
-                        except Exception as e:
-                            logger.warning(f'Unknown error occured on deleting message {id_to_delete} in {group_id}: {e}')
-                    else:
-                        logger.warning(f'Unknown platform: {platform} (from {message}), please report this bug')
+                # List of msg_doc dicts
+                old_messages = message.get('body', {})
+                if type(old_messages) is not list: old_messages = [old_messages]
+                irc_groups_notified = set()
+                for old_message in old_messages:
+                    for to_delete in old_message.get('bridge_messages', []):
+                        group_to_delete, id_to_delete = to_delete.get('group', ''), to_delete.get('message_id')
+                        platform, group_id = group_to_delete.split('/', 1)
+                        if platform == 'irc':
+                            # Send a message to inform users of the delete, but only once for bulk deletion
+                            if group_id in irc_groups_notified: continue
+                            irc_bot.send('PRIVMSG', target=group_id, message=(await get_deleted_message(old_messages)))
+                            irc_groups_notified.add(group_id)
+                        elif platform == 'telegram':
+                            # Delete all messages at the same time
+                            try:
+                                await tg_bot.delete_messages(int(group_id), [id_to_delete])
+                            except (errors.ChannelInvalidError, errors.ChannelPrivateError, errors.MessageDeleteForbiddenError) as e:
+                                logger.warning(f'Telegram error occured on deleting message {id_to_delete} in {group_id}: {e}')
+                            except Exception as e:
+                                # TODO: probably catch errors.FloodWaitError
+                                logger.warning(f'Unknown error occured on deleting message {id_to_delete} in {group_id}: {e}')
+                        elif platform == 'discord':
+                            # Have to delete messages one by one
+                            try:
+                                channel = dc_bot.get_channel(int(group_id))
+                                if not channel:
+                                    logger.warning(f'Discord error occured on deleting message {id_to_delete} in {group_id}: channel not found')
+                                    continue
+                                msg = await channel.fetch_message(id_to_delete)
+                                await msg.delete()
+                            except discord.errors.DiscordException as e:
+                                logger.warning(f'Discord error occured on deleting message {id_to_delete} in {group_id}: {e}')
+                            except Exception as e:
+                                logger.warning(f'Unknown error occured on deleting message {id_to_delete} in {group_id}: {e}')
+                        else:
+                            logger.warning(f'Unknown platform: {platform} (from {message}), please report this bug')
             elif action == 'edit':
                 new_message = message.get('body', {}).get('new_message')
                 groups_edited = set()
-                for to_edit in message.get('body', {}).get('to_edit', {}):
+                old_message = message.get('body', {}).get('to_edit', {})
+                for to_edit in old_message.get('bridge_messages', {}):
                     group_to_edit, id_to_edit = to_edit.get('group', ''), to_edit.get('message_id')
                     platform, group_id = group_to_edit.split('/', 1)
                     relay_message_text = await get_relay_message(new_message, platform)
                     if platform == 'irc':
-                        # Cannot edit IRC messages
-                        continue
+                        # Send a message to inform users of the edit
+                        irc_bot.send('PRIVMSG', target=group_id, message=(await get_edited_message(old_message, new_message)))
                     elif platform == 'telegram':
                         # Workaround: deal with the first message in each group only
                         # TODO: find a better solution for edge cases
