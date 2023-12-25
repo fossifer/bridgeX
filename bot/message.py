@@ -23,7 +23,7 @@ async def get_tg_nick(sender):
         return username or first_last
     else:
         return first_last or username
-    
+
 async def get_relay_message(message, target_platform: str) -> str:
     """
     Add a prefix to the message from other platforms to indicate the source.
@@ -33,6 +33,7 @@ async def get_relay_message(message, target_platform: str) -> str:
         bold_char = '**'
     elif target_platform == 'irc':
         bold_char = '\u0002'
+
     # Show file attributes; only IRC needs to see the url
     file_str = ''
     if target_platform == 'irc':
@@ -44,8 +45,13 @@ async def get_relay_message(message, target_platform: str) -> str:
         elif len(message.files) == 1:
             file_str = message.files[0].__str__(with_url=False)
     if file_str: file_str += ' '
+
+    fwd_str = ''
+    if message.fwd_from:
+        fwd_str = f'Fwd {message.fwd_from}: '
+
     # TODO: make the message format configurable
-    return f'[{message.platform_prefix} - {bold_char}{message.from_nick}{bold_char}] {file_str}{message.text}'
+    return f'[{message.platform_prefix} - {bold_char}{message.from_nick}{bold_char}] {fwd_str}{file_str}{message.text}'
 
 async def get_edited_message(old_message: dict, new_message) -> str:
     """
@@ -158,6 +164,7 @@ class Message:
         self.created_at = None
         self.edited_at = None
         self.deleted_at = None
+        self.fwd_from = None
         self.files: list[File] = []
 
     @classmethod
@@ -180,6 +187,14 @@ class Message:
             self.platform_prefix = await config.get('Telegram', 'platform_prefix', default='T')
             self.created_at = message.date
             self.edited_at = message.edit_date
+            if message.forward:
+                if message.forward.sender:
+                    self.fwd_from = await get_tg_nick(message.forward.sender)
+                elif message.forward.chat:
+                    self.fwd_from = message.forward.chat.title
+                elif message.forward.from_name:
+                    # User with their name hidden
+                    self.fwd_from = message.forward.from_name
         elif type(message) is discord.Message:
             # Discord message
             self.text = message.content

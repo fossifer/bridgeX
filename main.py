@@ -223,7 +223,8 @@ async def worker():
             'text': message.text,
             # Convert File object to dict
             'files': [vars(file) for file in message.files],
-            # TODO: reply_to, fwd_from
+            'fwd_from': message.fwd_from,
+            # TODO: reply_to
         })
 
 async def main():
