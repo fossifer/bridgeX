@@ -5,6 +5,10 @@ __pycache__/
 # Tests
 tests/
 
+# Django
+manage.py
+db.sqlite3
+
 # Telethon sessions
 *.session
 *.session-journal
