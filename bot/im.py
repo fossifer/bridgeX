@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from message import File
+from .message import File
 
 class MessagingPlatform(ABC):
     """

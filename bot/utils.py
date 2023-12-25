@@ -1,7 +1,7 @@
 import asyncio
 import logging
-from config import Config
-from message import Message
+from .config import Config
+from .message import Message
 
 config = Config('bridge.yaml')
 logger = logging.getLogger(__name__)

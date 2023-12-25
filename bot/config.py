@@ -1,3 +1,4 @@
+import os
 import yaml
 import asyncio
 
@@ -12,6 +13,8 @@ class Config:
         path = kw.get('path') or (args[0] if len(args) else None)
         if not path:
             raise TypeError('The creation of Config missing path argument, which can be either passed as positional or keyword')
+        # Convert to absolute path to ensure the same file maps to the same config instance
+        path = os.path.abspath(path)
         if not hasattr(cls, '_instances'):
             cls._instances = {}
         if not cls._instances.get(path):
@@ -30,8 +33,12 @@ class Config:
 
     async def load(self):
         async with self._lock:
-            with open(self._path, 'r') as yaml_file:
-                self._data = yaml.safe_load(yaml_file) or {}
+            try:
+                with open(self._path, 'r') as yaml_file:
+                    self._data = yaml.safe_load(yaml_file) or {}
+            except FileNotFoundError as e:
+                # Create a new blank config
+                self._data = {}
 
     async def get(self, *keys, default=None):
         async with self._lock:
@@ -52,8 +59,11 @@ class Config:
         This method is NOT coroutine safe.
         """
         if self._data is None:
-            with open(self._path, 'r') as yaml_file:
-                self._data = yaml.safe_load(yaml_file) or {}
+            try:
+                with open(self._path, 'r') as yaml_file:
+                    self._data = yaml.safe_load(yaml_file) or {}
+            except FileNotFoundError as e:
+                self._data = {}
         current_dict = self._data
         for key in keys:
             if key not in current_dict:

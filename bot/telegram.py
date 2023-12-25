@@ -1,10 +1,10 @@
 import asyncio
 import logging
-import utils
-from config import Config
-from database import MongoDB
-from im import MessagingPlatform
-from message import File, Message
+from . import utils
+from .config import Config
+from .database import MongoDB
+from .im import MessagingPlatform
+from .message import File, Message
 from telethon import TelegramClient, events, errors, functions, types
 from typing import Optional
 

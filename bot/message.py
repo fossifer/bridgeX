@@ -1,6 +1,6 @@
 import discord
 import telethon
-from config import Config
+from .config import Config
 from uuid import uuid4
 
 # Maximum number of media files per message, other files will be ignored

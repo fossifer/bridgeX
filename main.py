@@ -1,13 +1,13 @@
 import asyncio
 import discord
 import logging
-import utils
-from config import Config
-from database import MongoDB
-from discordbot import Discord
-from irc import IRC
-from message import get_relay_message, get_deleted_message, get_edited_message
-from telegram import Telegram
+import bot.utils as utils
+from bot.config import Config
+from bot.database import MongoDB
+from bot.discordbot import Discord
+from bot.irc import IRC
+from bot.message import get_relay_message, get_deleted_message, get_edited_message
+from bot.telegram import Telegram
 from telethon import errors
 
 # Load configs from file

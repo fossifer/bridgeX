@@ -1,9 +1,9 @@
 import logging
 import os
-from config import Config
+from .config import Config
 from datetime import datetime
 from motor.motor_asyncio import AsyncIOMotorClient
-from utils import get_bridge_map
+from .utils import get_bridge_map
 
 config = Config('bridge.yaml')
 logger = logging.getLogger(__name__)

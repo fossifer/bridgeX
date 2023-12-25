@@ -1,10 +1,10 @@
 import discord
 import logging
-import utils
-from config import Config
-from database import MongoDB
-from im import MessagingPlatform
-from message import File, Message
+from . import utils
+from .config import Config
+from .database import MongoDB
+from .im import MessagingPlatform
+from .message import File, Message
 
 config = Config('bridge.yaml')
 logger = logging.getLogger(__name__)

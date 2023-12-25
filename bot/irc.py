@@ -1,12 +1,12 @@
 import asyncio
 import bottom
 import logging
-import utils
-from config import Config
-from database import MongoDB
+from . import utils
+from .config import Config
+from .database import MongoDB
 from datetime import datetime
-from im import MessagingPlatform
-from message import File, Message
+from .im import MessagingPlatform
+from .message import Message
 
 config = Config('bridge.yaml')
 logger = logging.getLogger(__name__)
