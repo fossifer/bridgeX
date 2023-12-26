@@ -141,6 +141,7 @@ async def worker():
                 logger.warning(f'Unknown action {action} from message of a listener: {message}')
             continue
         logger.info(f'outgoing message: ' + str(message))
+        logger.info(f'outgoing message reply to: ' + str(message.reply_to))
         # The first item of the list in MongoDB is always the original message ('from'), others are 'to'
         bridge_messages = [{
             'group': message.from_group,
@@ -150,6 +151,13 @@ async def worker():
             # TODO: make this a helper function
             platform, group_id = group_to_send.split('/', 1)
             relay_message_text = await get_relay_message(message, platform)
+            # Get the message id to reply to on this platform and group
+            reply_to_id = None
+            if message.reply_to:
+                for replied_msg in message.reply_to.get('bridge_messages', []):
+                    if replied_msg.get('group') == group_to_send:
+                        reply_to_id = replied_msg.get('message_id')
+                        break
             if platform == 'irc':
                 # TODO: if message is too long, send in multiple times
                 irc_bot.send('PRIVMSG', target=group_id, message=relay_message_text)
@@ -169,7 +177,7 @@ async def worker():
                     if image_files:
                         sent = await tg_bot.send_file(int(group_id), image_files, caption=relay_message_text,
                                                       # If the message was downloaded as a document, then upload as document as well
-                                                      force_document=(message.files[0].type == 'document'))
+                                                      force_document=(message.files[0].type == 'document'), reply_to=reply_to_id)
                     # For messages after the first: reply to the first, and shall not include texts
                     first_msg = sent or None
                     if type(first_msg) is list: first_msg = first_msg[0]
@@ -183,7 +191,7 @@ async def worker():
                             if not first_msg and sent:
                                 first_msg = sent[-1]
                 else:
-                    sent = await tg_bot.send_message(int(group_id), relay_message_text, parse_mode='md')
+                    sent = await tg_bot.send_message(int(group_id), relay_message_text, parse_mode='md', reply_to=reply_to_id)
                 # For albums, return will be a list, so just convert all cases to list for convenience
                 if type(sent) is not list:
                     sent = [sent]
@@ -198,7 +206,10 @@ async def worker():
                 if not channel:
                     logger.warning(f'Discord error occured on sending message to {group_id}: channel not found')
                     continue
-                sent = await channel.send(relay_message_text, files=dc.construct_files(message.files))
+                if reply_to_id:
+                    sent = await channel.send(relay_message_text, files=dc.construct_files(message.files), reference=channel.get_partial_message(reply_to_id))
+                else:
+                    sent = await channel.send(relay_message_text, files=dc.construct_files(message.files))
                 bridge_messages.append({
                     'group': group_to_send,
                     'message_id': sent.id,
@@ -224,7 +235,7 @@ async def worker():
             # Convert File object to dict
             'files': [vars(file) for file in message.files],
             'fwd_from': message.fwd_from,
-            # TODO: reply_to
+            'reply_to': message.reply_to.get('_id') if message.reply_to else None,
         })
 
 async def main():

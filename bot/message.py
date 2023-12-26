@@ -1,6 +1,7 @@
 import discord
 import telethon
 from .config import Config
+from .database import MongoDB
 from uuid import uuid4
 
 # Maximum number of media files per message, other files will be ignored
@@ -8,6 +9,7 @@ from uuid import uuid4
 MAX_FILES_PER_MSG = 10
 
 config = Config('bridge.yaml')
+db = MongoDB()
 
 # Util functions
 async def get_tg_nick(sender):
@@ -26,7 +28,7 @@ async def get_tg_nick(sender):
 
 async def get_relay_message(message, target_platform: str) -> str:
     """
-    Add a prefix to the message from other platforms to indicate the source.
+    Convert the message object into actual text to send. Some metadata will be added.
     """
     bold_char = ''
     if target_platform in {'telegram', 'discord'}:
@@ -46,12 +48,21 @@ async def get_relay_message(message, target_platform: str) -> str:
             file_str = message.files[0].__str__(with_url=False)
     if file_str: file_str += ' '
 
+    # Show forward source
     fwd_str = ''
     if message.fwd_from:
         fwd_str = f'Fwd {message.fwd_from}: '
 
+    # Show reply to; only IRC needs to see details of replied message, other platforms have reply feature
+    reply_str = ''
+    if message.reply_to and target_platform == 'irc':
+        reply_text = message.reply_to.get("text", "<media>")
+        if len(reply_text) > 50:
+            reply_text = reply_text[:50] + '...'
+        reply_str = f'Re {message.reply_to.get("from_nick", "Anonymous")} 「{reply_text}」: '
+
     # TODO: make the message format configurable
-    return f'[{message.platform_prefix} - {bold_char}{message.from_nick}{bold_char}] {fwd_str}{file_str}{message.text}'
+    return f'[{message.platform_prefix} - {bold_char}{message.from_nick}{bold_char}] {reply_str}{fwd_str}{file_str}{message.text}'
 
 async def get_edited_message(old_message: dict, new_message) -> str:
     """
@@ -165,6 +176,7 @@ class Message:
         self.edited_at = None
         self.deleted_at = None
         self.fwd_from = None
+        self.reply_to = None
         self.files: list[File] = []
 
     @classmethod
@@ -195,6 +207,9 @@ class Message:
                 elif message.forward.from_name:
                     # User with their name hidden
                     self.fwd_from = message.forward.from_name
+            if message.is_reply:
+                reply_id = message.reply_to.reply_to_msg_id
+                self.reply_to = await db.find_bridged_messages_to_update(self.from_group, reply_id)
         elif type(message) is discord.Message:
             # Discord message
             self.text = message.content
@@ -208,6 +223,11 @@ class Message:
             self.platform_prefix = await config.get('Discord', 'platform_prefix', default='D')
             self.created_at = message.created_at
             self.edited_at = message.edited_at
+            if message.reference and not message.is_system():
+                # Besides reply, the reference field can also be nonempty for xpost or pinned messages
+                if message.reference.channel_id == message.channel.id:
+                    reply_id = message.reference.message_id
+                    self.reply_to = await db.find_bridged_messages_to_update(self.from_group, reply_id)
         elif type(message) is dict:
             # IRC message
             self.text = message.get('text', '')

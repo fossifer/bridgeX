@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from .config import Config
-from .message import Message
 
 config = Config('bridge.yaml')
 logger = logging.getLogger(__name__)
@@ -12,7 +11,7 @@ except ValueError:
     pass
 
 # The global message queue used by listeners and workers
-message_queue: asyncio.Queue[Message] = asyncio.Queue()
+message_queue = asyncio.Queue()
 
 async def get_bridge_map():
     bridge_cfg: 'list[list[str]]' = await config.get('Bridge', default=[])
