@@ -5,6 +5,7 @@ import bot.utils as utils
 from bot.config import Config
 from bot.database import MongoDB
 from bot.discordbot import Discord
+from bot.filter import Filter
 from bot.irc import IRC
 from bot.message import get_relay_message, get_deleted_message, get_edited_message
 from bot.telegram import Telegram
@@ -45,6 +46,7 @@ dc_bot = dc.bot
 db = MongoDB()
 msg_collection = db.collection
 
+filter = Filter()
 
 async def worker():
     """
@@ -65,6 +67,10 @@ async def worker():
                 for old_message in old_messages:
                     for to_delete in old_message.get('bridge_messages', []):
                         group_to_delete, id_to_delete = to_delete.get('group', ''), to_delete.get('message_id')
+                        # Check if the deleted message should be filtered
+                        if await filter.test(old_message, group_to_delete):
+                            logger.info(f'The message is blocked from deleted from {group_to_delete}')
+                            continue
                         platform, group_id = group_to_delete.split('/', 1)
                         if platform == 'irc':
                             # Send a message to inform users of the delete, but only once for bulk deletion
@@ -101,6 +107,10 @@ async def worker():
                 old_message = message.get('body', {}).get('to_edit', {})
                 for to_edit in old_message.get('bridge_messages', {}):
                     group_to_edit, id_to_edit = to_edit.get('group', ''), to_edit.get('message_id')
+                    # Check if the edited message should be filtered
+                    if await filter.test(new_message, group_to_edit):
+                        logger.info(f'The message is blocked from editing at {group_to_edit}')
+                        continue
                     platform, group_id = group_to_edit.split('/', 1)
                     relay_message_text = await get_relay_message(new_message, platform)
                     if platform == 'irc':
@@ -148,6 +158,10 @@ async def worker():
             'message_id': message.from_message_id,
         }]
         for group_to_send in (await utils.get_bridge_map()).get(message.from_group, []):
+            # Check if the message should be filtered
+            if await filter.test(message, group_to_send):
+                logger.info(f'The message is blocked from sending to {group_to_send}')
+                continue
             # TODO: make this a helper function
             platform, group_id = group_to_send.split('/', 1)
             relay_message_text = await get_relay_message(message, platform)
