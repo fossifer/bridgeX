@@ -98,6 +98,72 @@ class IRC(MessagingPlatform):
                 'created_at': received_at,
             }))
 
+        @bot.on('PART')
+        async def on_part(**kwargs):
+            # kwargs keys: nick, user, host, channel, message
+            # TODO: make the system message configurable
+            nick = kwargs.get('nick', '[Unknown nick]')
+            reason = kwargs.get('message')
+            if reason:
+                reason = f' ({reason})'
+            await self.put_sys_msg_if_active(f'<IRC: {nick} 已退出本频道{reason}>', **kwargs)
+
+        @bot.on('QUIT')
+        async def on_quit(**kwargs):
+            # kwargs keys: nick, user, host, message
+            nick = kwargs.get('nick', '[Unknown nick]')
+            reason = kwargs.get('message')
+            if reason:
+                reason = f' ({reason})'
+            await self.put_sys_msg_if_active(f'<IRC: {nick} 已离开 IRC{reason}>', **kwargs)
+
+        @bot.on('NICK')
+        async def on_nick(**kwargs):
+            # kwargs keys: nick, user, host, new_nick
+            nick = kwargs.get('nick', '[Unknown nick]')
+            new_nick = kwargs.get('new_nick', '[Unknown new nick]')
+            await self.put_sys_msg_if_active(f'<IRC: {nick} 已更名为 {new_nick}>', **kwargs)
+
+        # TODO: add kick and kill events after https://github.com/numberoverzero/bottom/issues/43 is fixed
+
+    async def put_sys_msg_if_active(self, message_text: str, **kwargs) -> None:
+        host = kwargs.get('host')
+        if not host:
+            return
+        groups = await db.get_active_groups_on_platform(host)
+        if not groups:
+            return
+        if kwargs.get('channel'):
+            channel = kwargs.get('channel')
+            # Check if user is active in this provided channel
+            if ('irc/' + channel) not in groups:
+                return
+            # If active, only send system message to this single channel
+            await message_queue.put(await Message.create({
+                'system': True,
+                'text': message_text,
+                # Record user info in system message for future commands against it like /ircban
+                'nick': kwargs.get('nick', ''),
+                'host': host,
+                'group': channel,
+                'created_at': datetime.utcnow(),
+            }))
+            return
+
+        # Broadcast system message to all channels the user is active in
+        for group in groups:
+            # The results from db have platform prefix, but we don't need it to construct a Message object
+            _, group_id = group.split('/', 1)
+            await message_queue.put(await Message.create({
+                'system': True,
+                'text': message_text,
+                # Record user info in system message for future commands against it like /ircban
+                'nick': kwargs.get('nick', ''),
+                'host': host,
+                'group': group_id,
+                'created_at': datetime.utcnow(),
+            }))
+
     def construct_files(self, _):
         # Cannot upload files to IRC so leave empty
         return

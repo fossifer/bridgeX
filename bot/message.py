@@ -30,6 +30,11 @@ async def get_relay_message(message, target_platform: str) -> str:
     """
     Convert the message object into actual text to send. Some metadata will be added.
     """
+    if message.system:
+        # Do not add any prefix. Only send as inline code if possible
+        code_char = '' if target_platform == 'irc' else '`'
+        return f'{code_char}{message.text}{code_char}'
+
     bold_char = ''
     if target_platform in {'telegram', 'discord'}:
         bold_char = '**'
@@ -165,6 +170,7 @@ class Message:
     """
 
     def __init__(self):
+        self.system = False
         self.deleted = False
         self.text = None
         self.from_user_id = None
@@ -230,6 +236,7 @@ class Message:
                     self.reply_to = await db.find_bridged_messages_to_update(self.from_group, reply_id)
         elif type(message) is dict:
             # IRC message
+            self.system = message.get('system', False)
             self.text = message.get('text', '')
             self.from_user_id = message.get('host', '')
             self.from_nick = message.get('nick', '')

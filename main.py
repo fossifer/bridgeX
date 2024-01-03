@@ -238,6 +238,7 @@ async def worker():
                 logger.warning(f'Unknown platform: {platform} (from {group_to_send}), check your Bridge config')
 
         await msg_collection.insert_one({
+            'system': message.system,
             'deleted': False,
             'created_at': message.created_at,
             'edited_at': None,

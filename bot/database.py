@@ -1,7 +1,7 @@
 import logging
 import os
 from .config import Config
-from datetime import datetime
+from datetime import datetime, timedelta
 from motor.motor_asyncio import AsyncIOMotorClient
 from .utils import get_bridge_map
 
@@ -93,3 +93,29 @@ class MongoDB:
                 'deleted_at': datetime.utcnow(),
             }
         })
+
+    async def get_active_groups_on_platform(self, user_id, platform='irc') -> list[str]:
+        """
+        An active user is currently defined as having sent a message in any monitored channel within 10 minutes.
+
+        Currently only active IRC users are tracked to display a system message after they quit.
+
+        TODO: make the duration configurable
+        """
+        timeout = 600  # in seconds
+        deadline = datetime.utcnow() - timedelta(seconds=timeout)
+        # TODO: Find the most recent channels
+        ret = set()
+        messages = self.collection.find({
+            'from_user_id': user_id,
+            # Exclude system messages like join/quit, change nick, ...
+            'system': False,
+            'created_at': {
+                '$gte': deadline,
+            },
+        })
+        # For each message found, add corresponding groups on given platform
+        for message in await messages.to_list(length=10):
+            ret |= {bm.get('group') for bm in message.get('bridge_messages', []) if bm.get('group', '').startswith(platform)}
+
+        return list(ret)
