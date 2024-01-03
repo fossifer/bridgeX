@@ -1,5 +1,5 @@
 import asyncio
-import bottom
+import pydle
 import logging
 from . import utils
 from .config import Config
@@ -19,112 +19,65 @@ db = MongoDB()
 msg_collection = db.collection
 message_queue = utils.message_queue
 
-class IRC(MessagingPlatform):
-    """
-    The singleton IRC listener.
-    """
+class IRCBot(pydle.Client):
+    async def on_connect(self):
+        # Join all channels in config
+        async for c in utils.get_groups('IRC'):
+            await self.join(c)
+            #await asyncio.sleep(0.2)
 
-    def __init__(self):
-        if not hasattr(self, 'bot'):
-            self.bot = bottom.Client(
-                host=config.get_nowait('IRC', 'host'),
-                port=config.get_nowait('IRC', 'port'),
-                ssl=config.get_nowait('IRC', 'ssl')
-            )
-            self.register_listeners()
+    async def on_message(self, target: str, source: str, message: str):
+        """
+        IRC listener serves as a producer to add new messages to queue.
+        """
+        # IRC does not send us the time when a message is received
+        # so just use the current UTC time
+        received_at = datetime.utcnow()
+        mynick = await config.get('IRC', 'nick')
+        # Don't echo self
+        if source == mynick:
+            return
+        # Must be in bridge map
+        if 'irc/' + target not in (await utils.get_bridge_map()):
+            return
 
-    def download_media(self, _):
-        # There are no attachments on IRC, so do nothing
-        return []
+        await message_queue.put(await Message.create({
+            'group': target,
+            'host': self.users[source]['hostname'],
+            'nick': source,
+            'text': message,
+            'created_at': received_at,
+        }))
 
-    def register_listeners(self):
-        bot = self.bot
+    async def on_part(self, channel: str, user: str, message: str='') -> None:
+        # TODO: make the system message configurable
+        if message:
+            message = f' ({message})'
+        await self.put_sys_msg_if_active(f'<IRC: {user} 已退出本频道{message}>',
+                                         nick=user, channel=channel, host=self.users[user]['hostname'])
 
-        @bot.on('CLIENT_CONNECT')
-        async def connect(**kwargs):
-            nick = await config.get('IRC', 'nick')
-            bot.send('NICK', nick=nick)
-            bot.send('USER', user=nick, realname=await config.get('IRC', 'real_name', default=''))
+    async def on_quit(self, user: str, message: str='') -> None:
+        if message:
+            message = f' ({message})'
+        await self.put_sys_msg_if_active(f'<IRC: {user} 已离开 IRC{message}>',
+                                         nick=user, host=self.users[user]['hostname'])
 
-            # Don't try to join channels until the server has
-            # sent the MOTD, or signaled that there's no MOTD.
-            done, pending = await asyncio.wait(
-                [bot.wait("RPL_ENDOFMOTD"),
-                 bot.wait("ERR_NOMOTD")],
-                return_when=asyncio.FIRST_COMPLETED
-            )
+    async def on_kick(self, channel: str, target: str, by: str, reason: str='') -> None:
+        if reason:
+            reason = f' ({reason})'
+        await self.put_sys_msg_if_active(f'<IRC: {target} 已被 {by} 踢出本频道{reason}>',
+                                         nick=target, channel=channel, host=self.users[target]['hostname'])
 
-            # Login to account and do not join channels before successfully logged in.
-            bot.send('PRIVMSG',
-                         target='NickServ',
-                         message=f'identify {nick} {await config.get("IRC", "password", default="")}')
-            await asyncio.sleep(0.5)
+    async def on_kill(self, target: str, by: str, reason: str='') -> None:
+        if reason:
+            reason = f' ({reason})'
+        await self.put_sys_msg_if_active(f'<IRC: {target} 已被 {by} 踢出服务器{reason}>',
+                                         nick=target, host=self.users[target]['hostname'])
 
-            # Cancel whichever waiter's event didn't come in.
-            for future in pending:
-                future.cancel()
-
-            # Join all channels required to be connected slowly.
-            async for c in utils.get_groups('IRC'):
-                bot.send('JOIN', channel=c)
-                await asyncio.sleep(0.2)
-
-        @bot.on('PING')
-        def keepalive(message, **kwargs):
-            bot.send('PONG', message=message)
-
-        @bot.on('PRIVMSG')
-        async def message(nick, target, message, **kwargs):
-            """
-            IRC listener serves as a producer to add new messages to queue.
-            """
-            # kwargs keys: user, host
-            # IRC does not send us the time when a message is received
-            # so just use the current UTC time
-            received_at = datetime.utcnow()
-            mynick = await config.get('IRC', 'nick')
-            # Don't echo self
-            if nick == mynick:
-                return
-            # Must be in bridge map
-            if 'irc/' + target not in (await utils.get_bridge_map()):
-                return
-
-            await message_queue.put(await Message.create({
-                'group': target,
-                'host': kwargs.get('host', ''),
-                'nick': nick,
-                'text': message,
-                'created_at': received_at,
-            }))
-
-        @bot.on('PART')
-        async def on_part(**kwargs):
-            # kwargs keys: nick, user, host, channel, message
-            # TODO: make the system message configurable
-            nick = kwargs.get('nick', '[Unknown nick]')
-            reason = kwargs.get('message')
-            if reason:
-                reason = f' ({reason})'
-            await self.put_sys_msg_if_active(f'<IRC: {nick} 已退出本频道{reason}>', **kwargs)
-
-        @bot.on('QUIT')
-        async def on_quit(**kwargs):
-            # kwargs keys: nick, user, host, message
-            nick = kwargs.get('nick', '[Unknown nick]')
-            reason = kwargs.get('message')
-            if reason:
-                reason = f' ({reason})'
-            await self.put_sys_msg_if_active(f'<IRC: {nick} 已离开 IRC{reason}>', **kwargs)
-
-        @bot.on('NICK')
-        async def on_nick(**kwargs):
-            # kwargs keys: nick, user, host, new_nick
-            nick = kwargs.get('nick', '[Unknown nick]')
-            new_nick = kwargs.get('new_nick', '[Unknown new nick]')
-            await self.put_sys_msg_if_active(f'<IRC: {nick} 已更名为 {new_nick}>', **kwargs)
-
-        # TODO: add kick and kill events after https://github.com/numberoverzero/bottom/issues/43 is fixed
+    async def on_nick_change(self, old: str, new: str) -> None:
+        # This is called after parent's on_raw_nick(), so look up hostname with new nick
+        await self.put_sys_msg_if_active(f'<IRC: {old} 已更名为 {new}>',
+                                         nick=old, host=self.users[new]['hostname'])
 
     async def put_sys_msg_if_active(self, message_text: str, **kwargs) -> None:
         host = kwargs.get('host')
@@ -163,6 +116,37 @@ class IRC(MessagingPlatform):
                 'group': group_id,
                 'created_at': datetime.utcnow(),
             }))
+
+class IRC(MessagingPlatform):
+    """
+    The singleton IRC listener.
+    """
+
+    def __init__(self):
+        if not hasattr(self, 'bot'):
+            self.bot = IRCBot(
+                nickname=config.get_nowait('IRC', 'nick'),
+                sasl_username=config.get_nowait("IRC", "username", default=""),
+                sasl_password=config.get_nowait("IRC", "password", default=""),
+                sasl_identity='NickServ',
+                realname=config.get_nowait('IRC', 'real_name', default='')
+            )
+            self.register_listeners()
+
+    async def connect(self):
+        await self.bot.connect(
+            hostname=config.get_nowait('IRC', 'host'),
+            port=config.get_nowait('IRC', 'port'),
+            tls=config.get_nowait('IRC', 'ssl'),
+        )
+
+    def download_media(self, _):
+        # There are no attachments on IRC, so do nothing
+        return []
+
+    def register_listeners(self):
+        # Done in IRCBot class
+        pass
 
     def construct_files(self, _):
         # Cannot upload files to IRC so leave empty
