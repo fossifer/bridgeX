@@ -5,6 +5,8 @@ from .config import Config
 from .database import MongoDB
 from .im import MessagingPlatform
 from .message import File, Message
+from discord import app_commands
+from discord.ext.commands import is_owner, Bot, Context
 
 config = Config('bridge.yaml')
 logger = logging.getLogger(__name__)
@@ -26,7 +28,8 @@ class Discord(MessagingPlatform):
         if not hasattr(self, 'bot'):
             intents = discord.Intents.default()
             intents.message_content = True
-            self.bot = discord.Client(intents=intents)
+            #self.bot = discord.Client(intents=intents)
+            self.bot = Bot(command_prefix='!', intents=intents)
             self.register_listeners()
 
     async def download_media(self, message: discord.Message) -> list[File]:
@@ -66,7 +69,47 @@ class Discord(MessagingPlatform):
 
         @bot.event
         async def on_ready():
-            logging.info(f'Discord: we have logged in as {bot.user}')
+            synced = await bot.tree.sync()
+            logging.info(f'Discord: we have logged in as {bot.user}, {len(synced)} commands synced')
+
+        @bot.tree.command(description="列出 IRC 频道所有用户，或查看目标是否在频道中")
+        @app_commands.describe(target="要查看是否在线的昵称，可选")
+        async def ircnames(interaction: discord.Interaction, target: str=''):
+            if ('discord/' + str(interaction.channel.id)) not in (await utils.get_bridge_map()):
+                return
+            logger.info(f'Discord {interaction.channel.id} incoming /ircnames: ' + str(interaction.message))
+            await message_queue.put({
+                'action': 'ircnames',
+                'target': target,
+                'event': interaction,
+                'from_group': 'discord/' + str(interaction.channel.id),
+            })
+
+        @bot.tree.command(description="查看 IRC 在线用户的 WHOIS 信息")
+        @app_commands.describe(target="要查看的昵称，必须在线")
+        async def ircwhois(interaction: discord.Interaction, target: str):
+            if ('discord/' + str(interaction.channel.id)) not in (await utils.get_bridge_map()):
+                return
+            logger.info(f'Discord {interaction.channel.id} incoming /ircwhois: ' + str(interaction.message))
+            await message_queue.put({
+                'action': 'ircwhois',
+                'target': target,
+                'event': interaction,
+                'from_group': 'discord/' + str(interaction.channel.id),
+            })
+
+        @bot.tree.command(description="查看 IRC 离线用户的 WHOWAS 信息")
+        @app_commands.describe(target="要查看的昵称，必须离线")
+        async def ircwhowas(interaction: discord.Interaction, target: str):
+            if ('discord/' + str(interaction.channel.id)) not in (await utils.get_bridge_map()):
+                return
+            logger.info(f'Discord {interaction.channel.id} incoming /ircwhowas: ' + str(interaction.message))
+            await message_queue.put({
+                'action': 'ircwhowas',
+                'target': target,
+                'event': interaction,
+                'from_group': 'discord/' + str(interaction.channel.id),
+            })
 
         @bot.event
         async def on_message(message):

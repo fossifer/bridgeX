@@ -79,6 +79,25 @@ class IRCBot(pydle.Client):
         await self.put_sys_msg_if_active(f'<IRC: {old} 已更名为 {new}>',
                                          nick=old, host=self.users[new]['hostname'])
 
+    async def my_whois(self, nickname):
+        """
+        A wrapper of super().whois() that adds a timeout, and won't return empty results.
+        """
+        # Can be rewritten in 3.11 with asyncio.timeout
+        # Discord interaction's time limit is 3 seconds, so timeout should be less than 3
+        try:
+            ret = await asyncio.wait_for(super().whois(nickname), timeout=2)
+            return ret if ret else 'Error: no such user'
+        except asyncio.TimeoutError:
+            return 'Error: server response timed out (likely an issue in pydle, not the fault of mine!)'
+
+    async def my_whowas(self, nickname):
+        try:
+            ret = await asyncio.wait_for(super().whowas(nickname), timeout=2)
+            return ret if ret else 'Error: no such user'
+        except asyncio.TimeoutError:
+            return 'Error: server response timed out (likely an issue in pydle, not the fault of mine!)'
+
     async def put_sys_msg_if_active(self, message_text: str, **kwargs) -> None:
         host = kwargs.get('host')
         if not host:

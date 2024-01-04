@@ -94,6 +94,38 @@ class Telegram(MessagingPlatform):
     def register_listeners(self):
         bot = self.bot
 
+        @bot.on(events.NewMessage(incoming=True, pattern=r'^/ircnames($|[ @])'))
+        async def ircnames(event):
+            if ('telegram/' + str(event.chat_id)) not in (await utils.get_bridge_map()):
+                return
+            logger.info(f'Telegram {event.chat_id} incoming /ircnames: ' + str(event.message))
+            # Parse argument as the IRC nick to find
+            tmp = event.message.text.split(' ', 1)
+            target = None if len(tmp) < 2 else tmp[1]
+            await message_queue.put({
+                'action': 'ircnames',
+                'target': target,
+                'event': event,
+                'from_group': 'telegram/' + str(event.message.chat_id),
+            })
+
+        @bot.on(events.NewMessage(incoming=True, pattern=r'^/ircwho(i|wa)s($|[ @])'))
+        async def ircwhox(event):
+            if ('telegram/' + str(event.chat_id)) not in (await utils.get_bridge_map()):
+                return
+            logger.info(f'Telegram {event.chat_id} incoming /ircwhox: ' + str(event.message))
+            # Parse argument as the IRC nick to find
+            tmp = event.message.text.split(' ', 1)
+            if len(tmp) < 2:
+                return
+            target = tmp[1]
+            await message_queue.put({
+                'action': 'ircwhois' if tmp[0].startswith('/ircwhois') else 'ircwhowas',
+                'target': target,
+                'event': event,
+                'from_group': 'telegram/' + str(event.message.chat_id),
+            })
+
         @bot.on(events.NewMessage(incoming=True))
         async def listener(event):
             """

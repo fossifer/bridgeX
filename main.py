@@ -75,7 +75,7 @@ async def worker():
                         if platform == 'irc':
                             # Send a message to inform users of the delete, but only once for bulk deletion
                             if group_id in irc_groups_notified: continue
-                            irc_bot.send('PRIVMSG', target=group_id, message=(await get_deleted_message(old_messages)))
+                            await irc_bot.message(group_id, await get_deleted_message(old_messages))
                             irc_groups_notified.add(group_id)
                         elif platform == 'telegram':
                             # Delete all messages at the same time
@@ -115,7 +115,7 @@ async def worker():
                     relay_message_text = await get_relay_message(new_message, platform)
                     if platform == 'irc':
                         # Send a message to inform users of the edit
-                        irc_bot.send('PRIVMSG', target=group_id, message=(await get_edited_message(old_message, new_message)))
+                        await irc_bot.message(group_id, await get_edited_message(old_message, new_message))
                     elif platform == 'telegram':
                         # Workaround: deal with the first message in each group only
                         # TODO: find a better solution for edge cases
@@ -147,6 +147,44 @@ async def worker():
                     else:
                         logger.warning(f'Unknown platform: {platform} (from {message}), please report this bug')
                     groups_edited.add(group_to_edit)
+            elif action == 'ircnames':
+                # `event` is event in telethon or ctx in discord. Will be called as `event.reply(message)`.
+                target, event, from_group = message.get('target'), message.get('event'), message.get('from_group')
+                response = []
+                # Get all connected IRC channels
+                for group in (await utils.get_bridge_map()).get(from_group, []):
+                    platform, group_id = group.split('/', 1)
+                    if platform != 'irc':
+                        continue
+                    users = irc_bot.channels[group_id]['users']
+                    if target:
+                        response.append(f'{target} 在 {group_id} 频道' if target in users else f'{target} 不在 {group_id} 频道')
+                    else:
+                        response.append(f'{group_id} 中的用户: {", ".join(users)}')
+
+                if response:
+                    response = '\n'.join(response)
+                    if type(event) is discord.Interaction:
+                        await event.response.send_message(response)
+                    else:
+                        await event.reply(response)
+            elif action == 'ircwhois' or action == 'ircwhowas':
+                target, event, from_group = message.get('target'), message.get('event'), message.get('from_group')
+                response = []
+                # Must have a connected IRC channel to use whois/whowas
+                for group in (await utils.get_bridge_map()).get(from_group, []):
+                    platform, group_id = group.split('/', 1)
+                    if platform == 'irc':
+                        break
+                else:
+                    continue
+
+                response = (await irc_bot.my_whois(target)) if action == 'ircwhois' else (await irc_bot.my_whowas(target))
+                response = f'`{response}`'  # Send as inline code to avoid parse errors from Telethon
+                if type(event) is discord.Interaction:
+                    await event.response.send_message(response)
+                else:
+                    await event.reply(response)
             else:
                 logger.warning(f'Unknown action {action} from message of a listener: {message}')
             continue
@@ -174,7 +212,7 @@ async def worker():
                         break
             if platform == 'irc':
                 # TODO: if message is too long, send in multiple times
-                irc_bot.send('PRIVMSG', target=group_id, message=relay_message_text)
+                await irc_bot.message(group_id, relay_message_text)
                 bridge_messages.append({
                     'group': group_to_send,
                     # IRC messages have no IDs
@@ -256,7 +294,7 @@ async def worker():
 async def main():
     await asyncio.gather(
         worker(),
-        irc_bot.connect(),
+        irc.connect(),
         dc_bot.start(config.get_nowait('Discord', 'token')),
         tg.deleted_poller(),
         tg_bot.run_until_disconnected(),
