@@ -31,3 +31,10 @@ async def get_groups(platform: str):
     for group in (await get_bridge_map()).keys():
         if group.startswith(platform.lower()):
             yield group.split('/', 1)[1]
+
+def normurl(url: str) -> str:
+    """
+    Add a slash in case the url in config does not.
+    """
+    if not url: return url
+    return url + '/' if url[-1] != '/' else url

@@ -1,6 +1,7 @@
 import asyncio
 import discord
 import logging
+import os
 import bot.utils as utils
 from bot.config import Config
 from bot.database import MongoDB
@@ -10,6 +11,7 @@ from bot.irc import IRC
 from bot.message import get_relay_message, get_deleted_message, get_edited_message
 from bot.telegram import Telegram
 from telethon import errors
+from uuid import uuid4
 
 # Load configs from file
 config = Config('bridge.yaml')
@@ -47,6 +49,39 @@ db = MongoDB()
 msg_collection = db.collection
 
 filter = Filter()
+
+async def send_irc_message(group_id: str, text: str) -> str:
+    """
+    If message is too long, send in multiple times or upload to pastebin, depends on config.
+
+    Returns truncated text with a url to pastebin, or the original text
+    """
+    max_lines = await config.get('IRC', 'max_lines')
+    lines = text.split('\n')
+    if len(lines) > max_lines:
+        if await config.get('IRC', 'upload_long_msg'):
+            # upload to pastebin
+            filename = str(uuid4()) + '.txt'
+            path = os.path.normpath(await config.get('Files', 'path') + '/' + filename)
+            url = utils.normurl(await config.get('Files', 'url')) + filename
+            # TODO: catch file write errors
+            with open(path, 'w') as f:
+                f.write(text)
+            # Truncate original text and add a link to full text; truncate the last line to make space for url
+            lines = lines[:max_lines]
+            url_text = f'...\u0002 Full text is at {url}\u0002'
+            lines[-1] = lines[-1][:500-len(url_text)]
+            text = '\n'.join(lines[:max_lines]) + url_text
+            await irc_bot.message(group_id, text)
+        else:
+            # split and send in multiple times
+            for start_line in range(0, len(lines), max_lines):
+                await irc_bot.message(group_id, '\n'.join(lines[start_line:start_line+max_lines]))
+                # This is currently an arbitrary delay
+                await asyncio.sleep(1)
+    else:
+        await irc_bot.message(group_id, text)
+    return text
 
 async def worker():
     """
@@ -105,6 +140,7 @@ async def worker():
                 new_message = message.get('body', {}).get('new_message')
                 groups_edited = set()
                 old_message = message.get('body', {}).get('to_edit', {})
+                relay_message_text_irc = ''
                 for to_edit in old_message.get('bridge_messages', {}):
                     group_to_edit, id_to_edit = to_edit.get('group', ''), to_edit.get('message_id')
                     # Check if the edited message should be filtered
@@ -115,7 +151,7 @@ async def worker():
                     relay_message_text = await get_relay_message(new_message, platform)
                     if platform == 'irc':
                         # Send a message to inform users of the edit
-                        await irc_bot.message(group_id, await get_edited_message(old_message, new_message))
+                        relay_message_text_irc = await send_irc_message(group_id, relay_message_text_irc if relay_message_text_irc else get_edited_message(old_message, new_message))
                     elif platform == 'telegram':
                         # Workaround: deal with the first message in each group only
                         # TODO: find a better solution for edge cases
@@ -195,6 +231,7 @@ async def worker():
             'group': message.from_group,
             'message_id': message.from_message_id,
         }]
+        relay_message_text_irc = ''
         for group_to_send in (await utils.get_bridge_map()).get(message.from_group, []):
             # Check if the message should be filtered
             if await filter.test(message, group_to_send):
@@ -211,8 +248,8 @@ async def worker():
                         reply_to_id = replied_msg.get('message_id')
                         break
             if platform == 'irc':
-                # TODO: if message is too long, send in multiple times
-                await irc_bot.message(group_id, relay_message_text)
+                # Update relay_message_text_irc, so other IRC channels do not need to upload again
+                relay_message_text_irc = await send_irc_message(group_id, relay_message_text_irc if relay_message_text_irc else relay_message_text)
                 bridge_messages.append({
                     'group': group_to_send,
                     # IRC messages have no IDs
