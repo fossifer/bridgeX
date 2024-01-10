@@ -1,7 +1,10 @@
 import discord
+import os
 import telethon
+import urllib.parse
 from .config import Config
 from .database import MongoDB
+from .utils import normurl
 from uuid import uuid4
 
 # Maximum number of media files per message, other files will be ignored
@@ -105,8 +108,8 @@ class File:
         self.type = type
         # Location of this file in internal storage
         self.path = path
-        # The URL to this file accessable by users (hopefully!)
-        self.url = self.path
+        # The public URL to this file
+        self.url = ''
         self.ext = ext
         if not self.ext:
             # Infer from path
@@ -146,9 +149,15 @@ class File:
         """
         Depending on configuration, upload to a media hosting website or just serve it with a web server.
         """
-        # TODO
-        self.url = self.path
-        return True
+        if self.is_empty() or self.url:
+            # Empty file or already uploaded
+            return False
+        if (await config.get('Files', 'upload')) == 'self':
+            filename_url = urllib.parse.quote_plus(os.path.basename(self.path))
+            self.url = normurl(await config.get('Files', 'url')) + filename_url
+            return True
+        # TODO: implement other upload methods (i.e. to public media hosting websites)
+        return False
 
     @staticmethod
     def generate_name(dir: str='', ext: str='') -> str:

@@ -61,6 +61,8 @@ class Discord(MessagingPlatform):
             if not file.is_empty():
                 # Only add non-empty files (i.e. download succeeded)
                 ret.append(file)
+                if not (await file.upload()):
+                    logger.info(f'Warning: failed to upload Discord file at {path}')
         logger.info(f'Downloaded Discord files: {ret}')
         return ret
 

@@ -89,6 +89,8 @@ class Telegram(MessagingPlatform):
         logger.info(f'Downloaded Telegram file: {ret}, path: {path}, is_empty: {ret.is_empty()}, metadata: {ret.metadata}')
         if ret.is_empty():
             return None
+        if not (await ret.upload()):
+            logger.info(f'Warning: failed to upload Telegram file at {path}')
         return ret
 
     def register_listeners(self):
