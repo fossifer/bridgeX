@@ -71,7 +71,7 @@ async def send_irc_message(group_id: str, text: str) -> str:
             lines = lines[:max_lines]
             url_text = f'...\u0002 Full text is at {url}\u0002'
             lines[-1] = lines[-1][:500-len(url_text)]
-            text = '\n'.join(lines[:max_lines]) + url_text
+            text = '\n'.join(lines) + url_text
             await irc_bot.message(group_id, text)
         else:
             # split and send in multiple times
