@@ -8,6 +8,7 @@ tests/
 # Django
 manage.py
 db.sqlite3
+web/settings.py
 
 # Telethon sessions
 *.session
