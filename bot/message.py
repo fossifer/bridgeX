@@ -153,7 +153,7 @@ class File:
             # Empty file or already uploaded
             return False
         if (await config.get('Files', 'upload')) == 'self':
-            filename_url = urllib.parse.quote_plus(os.path.basename(self.path))
+            filename_url = urllib.parse.quote(os.path.basename(self.path))
             self.url = normurl(await config.get('Files', 'url')) + filename_url
             return True
         # TODO: implement other upload methods (i.e. to public media hosting websites)
