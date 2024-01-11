@@ -2,6 +2,9 @@
 venv/
 __pycache__/
 
+# VSCode
+.vscode/
+
 # Tests
 tests/
 
