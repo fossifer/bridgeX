@@ -48,6 +48,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'web.middleware.OAuthMiddleware',
 ]
 
 ROOT_URLCONF = 'web.urls'
@@ -126,3 +127,25 @@ else:
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# OAuth Settings from https://code.basabuuka.org/alpcentaur/wmde_oauth_django_example/src/commit/10d3235120b68b0a2a47c72b44d9309ef758bddf/oauth_demo/settings.py
+OAUTH_URL_WHITELISTS = ['/']
+
+OAUTH_CLIENT_NAME = '<name-of-the-configured-wikimedia-app>'
+
+
+OAUTH_CLIENT = {
+    'client_id': '<client-application-key-of-wikimedia-app>',
+    'client_secret': '<client-application-secret-of-wikimedia-app>',
+    'access_token_url': 'https://meta.wikimedia.org/w/rest.php/oauth2/access_token',
+    'authorize_url': 'https://meta.wikimedia.org/w/rest.php/oauth2/authorize',
+    'api_base_url': 'https://meta.wikimedia.org/w/rest.php/oauth2/resource',
+    'redirect_uri': 'http://localhost:8000/oauth/callback',
+    'client_kwargs': {
+	'scope': 'basic',
+        'token_placement': 'header'
+    },
+    'userinfo_endpoint': 'resource/profile',
+}
+
+OAUTH_COOKIE_SESSION_ID = 'sso_session_id'
