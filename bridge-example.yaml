@@ -1,0 +1,43 @@
+IRC:
+    host: irc.libera.chat
+    port: 6697
+    ssl: True
+    nick: your-bot-nick
+    username: nickserv-username
+    password: nickserv-password
+    real_name: https://github.com/fossifer/bridgeX
+    platform_prefix: I
+    max_lines: 4
+    upload_long_msg: True
+
+Telegram:
+    session: bridge
+    api_id: 123456
+    api_hash: 1a2b3c4e5f
+    bot_token: 12345:TokenFromBotFather
+    nick_style: username
+    platform_prefix: T
+
+Discord:
+    token: TokenFromDiscord
+    nick_style: nickname
+    platform_prefix: D
+
+Bridge:
+- - irc/#channel-name
+  - telegram/-100123456789
+  - discord/1234567890123456789
+
+Files:
+    upload: self
+    path: files/
+    url: http://127.0.0.1:8000/files/
+
+Mongo:
+    uri: mongodb://127.0.0.1:27017
+    database_name: bridge
+    collection_name: messages
+
+Logging:
+    level: INFO
+    path: ''

@@ -1,0 +1,8 @@
+filters:
+- event: send
+  text: '^\(NOFWD\)'
+- event: receive
+  group: telegram
+  text: "Some regex to match message text"
+  nick: "Some regex to match username"
+  fwd_from: "Some regex to match display name of forward source"
