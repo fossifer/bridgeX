@@ -16,11 +16,12 @@ Including another URLconf
 """
 from django.conf import settings
 from django.conf.urls.static import static
-from django.contrib import admin
 from django.urls import path
 from . import views
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path("", views.index, name="index"),
+    path('config', views.config_view, name='config'),
+    path('filter', views.filter_view, name='filter'),
+    path('oauth/callback', views.oauth_callback, name='callback'),
+    path('', views.index, name='index'),
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

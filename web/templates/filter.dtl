@@ -1,0 +1,85 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Settings</title>
+  
+  <link rel="stylesheet" href="https://tools-static.wmflabs.org/cdnjs/ajax/libs/twitter-bootstrap/5.3.2/css/bootstrap.min.css">
+
+  <style>
+    .config-group {
+      border: 1px solid #ddd; 
+      border-radius: 5px;
+      padding: 20px; 
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container mt-5">
+
+    <h1>Filters</h1>
+
+    {% for filter in filters %}
+    <div class="config-group">
+      <h3>Filter {{forloop.counter}}</h3>
+      <!-- event, group, text, nick, fwd_from -->
+      <div class="row">
+        <div class="col-md-4">
+          <b>Event</b><br>
+          <small class="text-muted">Can only be send or receive.</small>
+        </div>
+        <div class="col-md-8">
+          <input type="text" class="form-control" value="{{filter.event}}">
+        </div>
+      </div>
+
+      <div class="row mt-3">
+        <div class="col-md-4">
+          <b>Group</b><br>
+          <small class="text-muted">Regex in form platform/group-id like telegram/-10012345.</small>
+        </div>
+        <div class="col-md-8">
+          <input type="text" class="form-control" value="{{filter.group}}">
+        </div>
+      </div>
+
+      <div class="row mt-3">
+        <div class="col-md-4">
+          <b>Text</b><br>
+          <small class="text-muted">Regex to match message text.</small>
+        </div>
+        <div class="col-md-8">
+          <input type="text" class="form-control" value="{{filter.text}}">
+        </div>
+      </div>
+
+      <div class="row mt-3">
+        <div class="col-md-4">
+          <b>Nick</b><br>
+          <small class="text-muted">Regex to match username displayed in bridged messages.</small>
+        </div>
+        <div class="col-md-8">
+          <input type="text" class="form-control" value="{{filter.nick}}">
+        </div>
+      </div>
+
+      <div class="row mt-3">
+        <div class="col-md-4">
+          <b>Forward from</b><br>
+          <small class="text-muted">Regex to match display name of Telegram forwarded messages.</small>
+        </div>
+        <div class="col-md-8">
+          <input type="text" class="form-control" value="{{filter.fwd_from}}">
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+
+  </div>
+
+</body>
+</html>
