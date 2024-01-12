@@ -151,7 +151,11 @@ async def worker():
                     relay_message_text = await get_relay_message(new_message, platform)
                     if platform == 'irc':
                         # Send a message to inform users of the edit
-                        relay_message_text_irc = await send_irc_message(group_id, relay_message_text_irc if relay_message_text_irc else get_edited_message(old_message, new_message))
+                        if relay_message_text_irc:
+                            # Use cached message returned by send_irc_message (possibly truncated)
+                            relay_message_text_irc = await send_irc_message(group_id, relay_message_text_irc)
+                        else:
+                            relay_message_text_irc = await send_irc_message(group_id, await get_edited_message(old_message, new_message))
                     elif platform == 'telegram':
                         # Workaround: deal with the first message in each group only
                         # TODO: find a better solution for edge cases
