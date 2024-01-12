@@ -102,10 +102,6 @@ async def worker():
                 for old_message in old_messages:
                     for to_delete in old_message.get('bridge_messages', []):
                         group_to_delete, id_to_delete = to_delete.get('group', ''), to_delete.get('message_id')
-                        # Check if the deleted message should be filtered
-                        if await filter.test(old_message, group_to_delete):
-                            logger.info(f'The message is blocked from deleted from {group_to_delete}')
-                            continue
                         platform, group_id = group_to_delete.split('/', 1)
                         if platform == 'irc':
                             # Send a message to inform users of the delete, but only once for bulk deletion
