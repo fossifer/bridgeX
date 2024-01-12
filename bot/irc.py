@@ -147,7 +147,6 @@ class IRC(MessagingPlatform):
                 nickname=config.get_nowait('IRC', 'nick'),
                 sasl_username=config.get_nowait("IRC", "username", default=""),
                 sasl_password=config.get_nowait("IRC", "password", default=""),
-                sasl_identity='NickServ',
                 realname=config.get_nowait('IRC', 'real_name', default='')
             )
             self.register_listeners()
