@@ -13,14 +13,14 @@ Bridge messages between Telegram, IRC and Discord. Complete revamp of https://gi
 
 ## Run
 
-Tested with Python 3.9 or above.
+Tested with Python 3.9. The IRC library, Pydle, currently does not support 3.10 or above.
 
 ```bash
 git clone https://github.com/fossifer/bridgeX.git
 cd bridgeX
 pip install -r requirements.txt
 mv filter-example.yaml filter.yaml
-mv config-example.yaml config.yaml
+mv bridge-example.yaml bridge.yaml
 # Don't forget to edit your config! You need to fill bot tokens and bridged groups.
 nohup python main.py &
 ```
