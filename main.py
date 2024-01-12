@@ -264,23 +264,32 @@ async def worker():
                     sent = []
                     # Send album or single photo
                     if image_files:
-                        sent = await tg_bot.send_file(int(group_id), image_files, caption=relay_message_text,
-                                                      # If the message was downloaded as a document, then upload as document as well
-                                                      force_document=(message.files[0].type == 'document'), reply_to=reply_to_id)
+                        try:
+                            sent = await tg_bot.send_file(int(group_id), image_files, caption=relay_message_text,
+                                                          # If the message was downloaded as a document, then upload as document as well
+                                                          force_document=(message.files[0].type == 'document'), reply_to=reply_to_id)
+                        except Exception as e:
+                            logger.warning(f'Cannot send Telegram message to {group_id}: {e}')
                     # For messages after the first: reply to the first, and shall not include texts
                     first_msg = sent or None
                     if type(first_msg) is list: first_msg = first_msg[0]
                     if other_files:
                         # Can only send one message per time, with filename overridden
                         for i, file in enumerate(other_files):
-                            sent.append(await tg_bot.send_file(int(group_id), file, caption=('' if first_msg else relay_message_text),
-                                                               attributes=[attrs[i]], reply_to=first_msg,
-                                                               # If the message was downloaded as a document, then upload as document as well
-                                                               force_document=(message.files[0].type == 'document')))
+                            try:
+                                sent.append(await tg_bot.send_file(int(group_id), file, caption=('' if first_msg else relay_message_text),
+                                                                   attributes=[attrs[i]], reply_to=first_msg,
+                                                                   # If the message was downloaded as a document, then upload as document as well
+                                                                   force_document=(message.files[0].type == 'document')))
+                            except Exception as e:
+                                logger.warning(f'Cannot send Telegram file to {group_id}: {e}')
                             if not first_msg and sent:
                                 first_msg = sent[-1]
                 else:
-                    sent = await tg_bot.send_message(int(group_id), relay_message_text, parse_mode='md', reply_to=reply_to_id)
+                    try:
+                        sent = await tg_bot.send_message(int(group_id), relay_message_text, parse_mode='md', reply_to=reply_to_id)
+                    except Exception as e:
+                        logger.warning(f'Cannot send Telegram message to {group_id}: {e}')
                 # For albums, return will be a list, so just convert all cases to list for convenience
                 if type(sent) is not list:
                     sent = [sent]
@@ -295,10 +304,15 @@ async def worker():
                 if not channel:
                     logger.warning(f'Discord error occured on sending message to {group_id}: channel not found')
                     continue
-                if reply_to_id:
-                    sent = await channel.send(relay_message_text, files=dc.construct_files(message.files), reference=channel.get_partial_message(reply_to_id))
-                else:
-                    sent = await channel.send(relay_message_text, files=dc.construct_files(message.files))
+                try:
+                    if reply_to_id:
+                        sent = await channel.send(relay_message_text, files=dc.construct_files(message.files), reference=channel.get_partial_message(reply_to_id))
+                    else:
+                        sent = await channel.send(relay_message_text, files=dc.construct_files(message.files))
+                except discord.errors.Forbidden:
+                    logger.warning(f'Cannot send Discord message to {group_id}: access denied')
+                except Exception as e:
+                    logger.warning(f'Cannot send Discord message to {group_id}: {e}')
                 bridge_messages.append({
                     'group': group_to_send,
                     'message_id': sent.id,
