@@ -24,7 +24,7 @@ class IRCBot(pydle.Client):
         # Join all channels in config
         async for c in utils.get_groups('IRC'):
             await self.join(c)
-            #await asyncio.sleep(0.2)
+            await asyncio.sleep(0.5)
 
     async def on_message(self, target: str, source: str, message: str):
         """
