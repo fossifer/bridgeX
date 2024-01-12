@@ -1,5 +1,6 @@
 import discord
 import os
+import re
 import telethon
 import urllib.parse
 from .config import Config
@@ -61,6 +62,13 @@ async def get_relay_message(message, target_platform: str) -> str:
     if message.fwd_from:
         fwd_str = f'Fwd {message.fwd_from}: '
 
+    text = message.text
+    if target_platform == 'irc':
+        cmd_regex = await config.get('IRC', 'command_regex')
+        if cmd_regex and re.search(cmd_regex, text):
+            # Treat as an IRC command, so prepend a new line to message text
+            text = '\n' + text
+
     # Show reply to; only IRC needs to see details of replied message, other platforms have reply feature
     reply_str = ''
     if message.reply_to and target_platform == 'irc':
@@ -70,7 +78,7 @@ async def get_relay_message(message, target_platform: str) -> str:
         reply_str = f'Re {message.reply_to.get("from_nick", "Anonymous")} 「{reply_text}」: '
 
     # TODO: make the message format configurable
-    return f'[{message.platform_prefix} - {bold_char}{message.from_nick}{bold_char}] {reply_str}{fwd_str}{file_str}{message.text}'
+    return f'[{message.platform_prefix} - {bold_char}{message.from_nick}{bold_char}] {reply_str}{fwd_str}{file_str}{text}'
 
 async def get_edited_message(old_message: dict, new_message) -> str:
     """

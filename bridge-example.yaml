@@ -9,6 +9,7 @@ IRC:
     platform_prefix: I
     max_lines: 4
     upload_long_msg: True
+    command_regex: "^[!@]"
 
 Telegram:
     session: bridge
