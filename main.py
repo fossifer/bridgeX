@@ -133,9 +133,9 @@ async def worker():
                         else:
                             logger.warning(f'Unknown platform: {platform} (from {message}), please report this bug')
             elif action == 'edit':
-                new_message = message.get('body', {}).get('new_message')
+                new_message = message.get('body', {}).get('new_message')  # Message
                 groups_edited = set()
-                old_message = message.get('body', {}).get('to_edit', {})
+                old_message = message.get('body', {}).get('to_edit', {})  # dict
                 relay_message_text_irc = ''
                 for to_edit in old_message.get('bridge_messages', {}):
                     group_to_edit, id_to_edit = to_edit.get('group', ''), to_edit.get('message_id')
@@ -146,6 +146,11 @@ async def worker():
                     platform, group_id = group_to_edit.split('/', 1)
                     relay_message_text = await get_relay_message(new_message, platform)
                     if platform == 'irc':
+                        # Workaround to https://github.com/LonamiWebs/Telethon/issues/4093
+                        # Telegram will send the first reaction as a MessageEdited event
+                        # and it's INDISTINGUISHABLE from normal edit events
+                        if old_message.get('text') == new_message.text:
+                            continue
                         # Send a message to inform users of the edit
                         if relay_message_text_irc:
                             # Use cached message returned by send_irc_message (possibly truncated)
