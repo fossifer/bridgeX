@@ -51,26 +51,22 @@ class IRCBot(pydle.Client):
 
     async def on_part(self, channel: str, user: str, message: str='') -> None:
         # TODO: make the system message configurable
-        if message:
-            message = f' ({message})'
+        message = f' ({message})' if message else ''
         await self.put_sys_msg_if_active(f'<IRC: {user} 已退出本频道{message}>',
                                          nick=user, channel=channel, host=self.users[user]['hostname'])
 
     async def on_quit(self, user: str, message: str='') -> None:
-        if message:
-            message = f' ({message})'
+        message = f' ({message})' if message else ''
         await self.put_sys_msg_if_active(f'<IRC: {user} 已离开 IRC{message}>',
                                          nick=user, host=self.users[user]['hostname'])
 
     async def on_kick(self, channel: str, target: str, by: str, reason: str='') -> None:
-        if reason:
-            reason = f' ({reason})'
+        reason = f' ({reason})' if reason else ''
         await self.put_sys_msg_if_active(f'<IRC: {target} 已被 {by} 踢出本频道{reason}>',
                                          nick=target, channel=channel, host=self.users[target]['hostname'])
 
     async def on_kill(self, target: str, by: str, reason: str='') -> None:
-        if reason:
-            reason = f' ({reason})'
+        reason = f' ({reason})' if reason else ''
         await self.put_sys_msg_if_active(f'<IRC: {target} 已被 {by} 踢出服务器{reason}>',
                                          nick=target, host=self.users[target]['hostname'])
 
