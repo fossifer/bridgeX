@@ -146,6 +146,25 @@ class Discord(MessagingPlatform):
             await db.delete_message_record(msg_doc)
 
         @bot.event
+        async def on_bulk_message_delete(messages):
+            """
+            Discord listener that detects when messages are bulk deleted.
+            This may happen when e.g. an admin banned a member and deletes all their messages.
+            """
+            for message in messages:
+                group = 'discord/' + str(message.channel.id)
+                if group not in (await utils.get_bridge_map()):
+                    continue
+                logger.info(f'Discord message {message.id} were bulk deleted in {message.channel.id}')
+                msg_doc = await db.find_bridged_messages_to_update(group, message.id)
+                if not msg_doc or msg_doc.get('deleted') or not msg_doc.get('bridge_messages'):
+                    continue
+                logger.info(f'Messages to be deleted in bridged groups: {msg_doc.get("bridge_messages")}')
+                # Put the request into queue for workers to actually delete messages
+                await message_queue.put({'action': 'delete', 'body': msg_doc})
+                await db.delete_message_record(msg_doc)
+
+        @bot.event
         async def on_message_edit(_, message):
             """
             Discord listener that detects when a message is edited.
