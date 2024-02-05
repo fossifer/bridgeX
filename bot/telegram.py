@@ -274,6 +274,8 @@ class Telegram(MessagingPlatform):
                     continue
                 logger.info(f'Messages to be deleted in bridged groups: {to_delete}')
                 await message_queue.put({'action': 'delete', 'body': to_delete})
+                # Sleep before checking next group
+                await asyncio.sleep(1)
 
             # Sleep after finishing a loop of all chats
             await asyncio.sleep(3)
