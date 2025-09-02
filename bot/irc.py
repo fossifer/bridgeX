@@ -20,6 +20,10 @@ msg_collection = db.collection
 message_queue = utils.message_queue
 
 class IRCBot(pydle.Client):
+    def __init__(**kwargs):
+        super().__init__(**kwargs)
+        self._cfg_nickname = kwargs['nickname']
+
     async def on_connect(self):
         # Join all channels in config
         async for c in utils.get_groups('IRC'):
@@ -33,9 +37,8 @@ class IRCBot(pydle.Client):
         # IRC does not send us the time when a message is received
         # so just use the current UTC time
         received_at = datetime.utcnow()
-        mynick = await config.get('IRC', 'nick')
         # Don't echo self
-        if source == mynick:
+        if source == self._cfg_nickname or source == self.nickname:
             return
         # Must be in bridge map
         if 'irc/' + target not in (await utils.get_bridge_map()):
