@@ -42,3 +42,8 @@ Mongo:
 Logging:
     level: INFO
     path: ''
+
+SpamCheck:
+    api_key: your-api-key-here
+    base_url: https://tg-cleaner.toolforge.org
+    delay_ms: 1000
