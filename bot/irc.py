@@ -20,7 +20,7 @@ msg_collection = db.collection
 message_queue = utils.message_queue
 
 class IRCBot(pydle.Client):
-    def __init__(**kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._cfg_nickname = kwargs['nickname']
 
