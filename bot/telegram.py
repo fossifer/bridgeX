@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import struct
 from . import utils
 from .config import Config
 from .database import MongoDB
@@ -259,7 +260,8 @@ class Telegram(MessagingPlatform):
                     await asyncio.sleep(e.seconds)
                 except errors.RPCError as e:
                     logger.warn(f'Poller error on GetMessagesRequest: {e}')
-                    pass
+                except struct.error as e:
+                    logger.warn(f'Poller error on GetMessagesRequest: {e}')
                 # logger.info(f'Poller got {len(msgs)} msgs: {msgs}')
                 # Find holes in messages
                 to_delete = []
